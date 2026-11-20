@@ -87,6 +87,13 @@ public class GitHubRepository {
 	public void setUpdatedAt(Instant updatedAt) {
 		this.updatedAt = updatedAt;
 	}
+	public String getOwner() {
+	    return owner;
+	}
+
+	public void setOwner(String owner) {
+	    this.owner = owner;
+	}
 
 	@Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -115,6 +122,9 @@ public class GitHubRepository {
 
     @Column(name = "updated_at")
     private Instant updatedAt;
+    
+    @Column(name = "owner")
+    private String owner;
 
     // Getters and setters
 }

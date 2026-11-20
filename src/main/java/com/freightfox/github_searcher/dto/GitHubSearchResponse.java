@@ -61,7 +61,8 @@ public class GitHubSearchResponse {
 
         @JsonProperty("updated_at")
         private String updatedAt;
-
+        private Owner owner; 
+        
         public Long getId() {
             return id;
         }
@@ -132,6 +133,25 @@ public class GitHubSearchResponse {
 
         public void setUpdatedAt(String updatedAt) {
             this.updatedAt = updatedAt;
+        }
+        public Owner getOwner() {
+            return owner;
+        }
+
+        public void setOwner(Owner owner) {
+            this.owner = owner;
+        }
+    }
+    public static class Owner {
+
+        private String login;
+
+        public String getLogin() {
+            return login;
+        }
+
+        public void setLogin(String login) {
+            this.login = login;
         }
     }
 }

@@ -7,7 +7,6 @@ import static org.mockito.Mockito.*;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,9 +30,8 @@ class GitHubServiceTest {
     @Test
     void shouldRejectEmptyKeyword() {
         IllegalArgumentException exception = assertThrows(
-            IllegalArgumentException.class,
-            () -> githubService.searchRepositories("", "Java", "stars")
-        );
+                IllegalArgumentException.class,
+                () -> githubService.searchRepositories("", "Java", "stars"));
 
         assertEquals("Search keyword cannot be empty", exception.getMessage());
     }
@@ -41,9 +39,8 @@ class GitHubServiceTest {
     @Test
     void shouldRejectInvalidSort() {
         IllegalArgumentException exception = assertThrows(
-            IllegalArgumentException.class,
-            () -> githubService.searchRepositories("springboot", "Java", "invalid")
-        );
+                IllegalArgumentException.class,
+                () -> githubService.searchRepositories("springboot", "Java", "invalid"));
 
         assertEquals("Sort must be stars, forks, or updated", exception.getMessage());
     }
@@ -52,7 +49,7 @@ class GitHubServiceTest {
     void shouldNotSaveWhenRepositoryListIsEmpty() {
         githubService.saveRepositories(new ArrayList<>());
 
-        verify(repository, never()).save(any(GitHubRepository.class));
+        verify(repository, never()).saveAll(any());
     }
 
     @Test
@@ -68,12 +65,40 @@ class GitHubServiceTest {
         item.setForks(20);
         item.setUpdatedAt("2026-11-18T10:00:00Z");
 
-        when(repository.findByGithubId(12345L))
-            .thenReturn(Optional.empty());
+        when(repository.findAllByGithubIdIn(anyCollection()))
+                .thenReturn(List.of());
 
         githubService.saveRepositories(List.of(item));
 
-        verify(repository).findByGithubId(12345L);
-        verify(repository).save(any(GitHubRepository.class));
+        verify(repository).findAllByGithubIdIn(anyCollection());
+        verify(repository).saveAll(any());
+    }
+
+    @Test
+    void shouldUpdateExistingRepository() {
+        GitHubRepository existing = new GitHubRepository();
+        existing.setGithubId(12345L);
+        existing.setName("old-name");
+
+        RepositoryItem item = new RepositoryItem();
+        item.setId(12345L);
+        item.setName("spring-boot");
+        item.setFullName("example/spring-boot");
+        item.setDescription("Updated description");
+        item.setLanguage("Java");
+        item.setStars(200);
+        item.setForks(50);
+        item.setUpdatedAt("2026-11-19T10:00:00Z");
+
+        when(repository.findAllByGithubIdIn(anyCollection()))
+                .thenReturn(List.of(existing));
+
+        githubService.saveRepositories(List.of(item));
+
+        assertEquals("spring-boot", existing.getName());
+        assertEquals("Updated description", existing.getDescription());
+        assertEquals(200, existing.getStars());
+
+        verify(repository).saveAll(any());
     }
 }

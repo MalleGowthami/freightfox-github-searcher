@@ -2,9 +2,12 @@
 package com.freightfox.github_searcher.service;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -39,14 +42,14 @@ public class GitHubService {
                     "Search keyword cannot be empty");
         }
 
-        String query = keyword;
+        String query = keyword.trim();
 
         if (language != null && !language.isBlank()) {
-            query += " language:" + language;
+            query += " language:" + language.trim();
         }
 
         String selectedSort = (sort == null || sort.isBlank())
-                ? "stars" : sort.toLowerCase();
+                ? "stars" : sort.trim().toLowerCase();
 
         if (!selectedSort.equals("stars")
                 && !selectedSort.equals("forks")
@@ -58,7 +61,6 @@ public class GitHubService {
 
         final String searchQuery = query;
         final String sortOrder = selectedSort;
-        System.out.println("GitHub API sort parameter: " + sortOrder);
 
         GitHubSearchResponse response = restClient.get()
                 .uri(uriBuilder -> uriBuilder
@@ -71,7 +73,7 @@ public class GitHubService {
                 .retrieve()
                 .body(GitHubSearchResponse.class);
 
-        // Ensure updated-date sorting is in descending order
+        // Sort by latest updated date
         if (response != null
                 && response.getItems() != null
                 && "updated".equals(sortOrder)) {
@@ -79,31 +81,53 @@ public class GitHubService {
             response.getItems().sort(
                     Comparator.comparing(
                             RepositoryItem::getUpdatedAt,
-                            Comparator.nullsLast(Comparator.reverseOrder())
-                    )
-            );
+                            Comparator.nullsLast(
+                                    Comparator.reverseOrder())));
         }
 
         return response;
     }
 
-    // Save or update GitHub repositories in PostgreSQL
+    // Save or update repositories in PostgreSQL using batch operations
     public void saveRepositories(List<RepositoryItem> items) {
 
         if (items == null || items.isEmpty()) {
             return;
         }
 
+        // Collect GitHub IDs from the API response
+        List<Long> githubIds = items.stream()
+                .map(RepositoryItem::getId)
+                .toList();
+
+        // Fetch all existing repositories in one database query
+        List<GitHubRepository> existingRepositories =
+                repository.findAllByGithubIdIn(githubIds);
+
+        // Store existing repositories in a map for quick lookup
+        Map<Long, GitHubRepository> repositoryMap = new HashMap<>();
+
+        for (GitHubRepository existing : existingRepositories) {
+            repositoryMap.put(existing.getGithubId(), existing);
+        }
+
+        // Prepare repositories for saving
         for (RepositoryItem item : items) {
 
-            GitHubRepository gitRepo = repository
-                    .findByGithubId(item.getId())
-                    .orElseGet(GitHubRepository::new);
+            GitHubRepository gitRepo =
+                    repositoryMap.computeIfAbsent(
+                            item.getId(),
+                            id -> new GitHubRepository());
 
             gitRepo.setGithubId(item.getId());
             gitRepo.setName(item.getName());
             gitRepo.setFullName(item.getFullName());
             gitRepo.setDescription(item.getDescription());
+
+            if (item.getOwner() != null) {
+                gitRepo.setOwner(item.getOwner().getLogin());
+            }
+
             gitRepo.setLanguage(item.getLanguage());
             gitRepo.setHtmlUrl(item.getHtmlUrl());
             gitRepo.setStars(item.getStars());
@@ -111,14 +135,17 @@ public class GitHubService {
 
             if (item.getUpdatedAt() != null
                     && !item.getUpdatedAt().isBlank()) {
-                gitRepo.setUpdatedAt(Instant.parse(item.getUpdatedAt()));
-            }
 
-            repository.save(gitRepo);
+                gitRepo.setUpdatedAt(
+                        Instant.parse(item.getUpdatedAt()));
+            }
         }
+
+        // Save all repositories together
+        repository.saveAll(repositoryMap.values());
     }
 
-    // Search and save repositories in one operation
+    // Search GitHub and save repositories
     public GitHubSearchResponse searchAndSaveRepositories(
             String keyword, String language, String sort) {
 
@@ -132,7 +159,41 @@ public class GitHubService {
         return response;
     }
 
-    // Retrieve all saved repositories from PostgreSQL
+    // Filter and sort saved repositories
+    public List<GitHubRepository> getFilteredRepositories(
+            String language, Integer minStars, String sort) {
+
+        if (minStars != null && minStars < 0) {
+            throw new IllegalArgumentException(
+                    "minStars cannot be negative");
+        }
+
+        String selectedSort = (sort == null || sort.isBlank())
+                ? "stars" : sort.trim().toLowerCase();
+
+        if (!selectedSort.equals("stars")
+                && !selectedSort.equals("forks")
+                && !selectedSort.equals("updated")) {
+
+            throw new IllegalArgumentException(
+                    "Sort must be stars, forks, or updated");
+        }
+
+        String sortField = selectedSort.equals("updated")
+                ? "updatedAt" : selectedSort;
+
+        Sort sorting = Sort.by(
+                Sort.Direction.DESC, sortField);
+
+        String selectedLanguage =
+                (language == null || language.isBlank())
+                        ? null : language.trim();
+
+        return repository.findFilteredRepositories(
+                selectedLanguage, minStars, sorting);
+    }
+
+    // Retrieve all saved repositories
     public List<GitHubRepository> getSavedRepositories() {
         return repository.findAll();
     }
