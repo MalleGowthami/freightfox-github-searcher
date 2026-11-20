@@ -83,6 +83,21 @@ Supported sort values:
 - stars
 - forks
 - updated
+http://localhost:8080/api/github/search
+{
+  "query": "spring boot",
+  "language": "Java",
+  "sort": "stars"
+
+}
+ http://localhost:8080/api/github/saved
+ http://localhost:8080/api/github/repositories?language=Java&minStars=1000&sort=stars
+ http://localhost:8080/api/github/repositories?sort=forks
+ http://localhost:8080/api/github/repositories?sort=updated
+ http://localhost:8080/api/github/repositories?sort=invalid
+ 
+
+
 
 ### 2. Retrieve All Saved Repositories
 
